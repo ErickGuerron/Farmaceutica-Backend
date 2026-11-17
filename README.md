@@ -116,6 +116,8 @@ Requieren encabezado `Authorization: Bearer <token>`. `GET` lo pueden usar `admi
 
 El campo `version` es el control de concurrencia de la tabla: envíe la versión que recibió al leer el empleado.
 
+La migración `0004` garantiza que cédula y correo sean únicos por separado y reutiliza índices compatibles que ya existan. Permite varios empleados sin correo. Si hay duplicados históricos, hay que resolverlos antes de aplicar la migración. `POST` y `PUT` responden HTTP `409` con `{"mensaje":"Empleado ya existe","codigo":"empleado_duplicado","campos":["cedula"]}` cuando una escritura colisiona. `campos` puede incluir `cedula`, `correo` o ambos. El índice de SQL Server decide qué escritura se confirma cuando dos solicitudes llegan al mismo tiempo.
+
 ### Autenticación
 
 | Método | Ruta | Descripción |

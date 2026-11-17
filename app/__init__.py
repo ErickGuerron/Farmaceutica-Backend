@@ -26,6 +26,10 @@ def create_app(settings: Config | None = None):
         cuerpo = {"mensaje": error.mensaje}
         if error.detalle:
             cuerpo["detalle"] = error.detalle
+        if error.codigo:
+            cuerpo["codigo"] = error.codigo
+        if error.campos is not None:
+            cuerpo["campos"] = error.campos
         return jsonify(cuerpo), error.status
 
     return app

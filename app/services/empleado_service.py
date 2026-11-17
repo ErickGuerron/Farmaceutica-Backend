@@ -3,9 +3,15 @@
 Las consultas y el control de concurrencia (row_version) son las mismas que tenía api-farmaceutica.py,
 para que la forma de los datos y los códigos de respuesta no cambien.
 """
-from sqlalchemy import text
+import re
+import sqlite3
+
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
 from app.database import engine
+from app.errors import ErrorAplicacion
+from app.models.empleado import empleado
 from app.services.versiones import codificar_version
 
 COLUMNAS = """
@@ -55,21 +61,57 @@ SQL_VERSION = text("SELECT row_version FROM Empleado WHERE id_empleado = :id")
 # Resultados de actualizar/eliminar cuando no se completa la operación
 NO_ENCONTRADO = "no_encontrado"
 CONFLICTO = "conflicto"
+_CAMPOS_UNICOS = ("cedula", "correo")
+_ERROR_UNICIDAD_SQL_SERVER = re.compile(r"\((?:2601|2627)\)(?:\s|$)")
 
 
 def _parametros_empleado(data):
+    correo = data.get("correo")
+    if isinstance(correo, str):
+        correo = correo.strip().lower() or None
     return {
         "cedula": data["cedula"],
         "nombres": data["nombres"],
         "apellidos": data["apellidos"],
         "telefono": data.get("telefono"),
         "direccion": data.get("direccion"),
-        "correo": data.get("correo"),
+        "correo": correo,
         "cargo": data["cargo"],
         "fecha_contratacion": data["fecha_contratacion"],
         "salario": data["salario"],
         "estado": data.get("estado", True),
     }
+
+
+def _error_de_duplicado(conn, error, parametros):
+    original = error.orig
+    if conn.dialect.name == "mssql":
+        mensaje = " ".join(str(parte) for parte in original.args)
+        if not _ERROR_UNICIDAD_SQL_SERVER.search(mensaje):
+            return None
+    elif getattr(original, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+        mensaje = str(original)
+    else:
+        return None
+
+    campos = []
+    for campo in _CAMPOS_UNICOS:
+        if parametros[campo] is None:
+            continue
+        consulta = select(empleado.c.id_empleado).where(empleado.c[campo] == parametros[campo])
+        if "id" in parametros:
+            consulta = consulta.where(empleado.c.id_empleado != parametros["id"])
+        if conn.execute(consulta.limit(1)).first() is not None:
+            campos.append(campo)
+
+    if not campos:
+        # La fila que chocó con el índice puede desaparecer antes de la consulta.
+        campos = [campo for campo in _CAMPOS_UNICOS if re.search(
+            rf"(?:'UX_Empleado_{campo}(?:_0004)?'|\bEmpleado\.{campo}\b)", mensaje, re.IGNORECASE,
+        )]
+    if not campos:
+        return None
+    return ErrorAplicacion("Empleado ya existe", status=409, codigo="empleado_duplicado", campos=campos)
 
 
 def serializar_empleado(row):
@@ -90,10 +132,17 @@ def serializar_empleado(row):
 
 
 def crear(data):
+    parametros = _parametros_empleado(data)
     with engine().connect() as conn:
         try:
-            conn.execute(SQL_INSERTAR, _parametros_empleado(data))
+            conn.execute(SQL_INSERTAR, parametros)
             conn.commit()
+        except IntegrityError as error:
+            conn.rollback()
+            duplicado = _error_de_duplicado(conn, error, parametros)
+            if duplicado is not None:
+                raise duplicado from error
+            raise
         except Exception:
             conn.rollback()
             raise
@@ -129,6 +178,12 @@ def actualizar(id, data, version):
             nueva_version = conn.execute(SQL_VERSION, {"id": id}).scalar()
             return "ok", nueva_version
 
+        except IntegrityError as error:
+            conn.rollback()
+            duplicado = _error_de_duplicado(conn, error, parametros)
+            if duplicado is not None:
+                raise duplicado from error
+            raise
         except Exception:
             conn.rollback()
             raise
