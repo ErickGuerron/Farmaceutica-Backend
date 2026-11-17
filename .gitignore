@@ -1,0 +1,28 @@
+# Secretos y configuración local (nunca subir)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Pruebas y cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Bases de datos locales (pruebas con SQLite)
+*.db
+*.sqlite
+*.sqlite3
+
+# Editores y sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
