@@ -36,6 +36,8 @@ class Config:
         self.jwt_expira_horas = int(_env("JWT_EXPIRA_HORAS", "8"))
 
         self.oauth_redirect_base = _env("OAUTH_REDIRECT_BASE", "http://localhost:5000").rstrip("/")
+        self.oauth_frontend_returns = frozenset(valor.strip() for valor in
+            _env("OAUTH_FRONTEND_RETURNS", "").split(",") if valor.strip())
 
         self.google_client_id = _env("GOOGLE_CLIENT_ID")
         self.google_client_secret = _env("GOOGLE_CLIENT_SECRET")

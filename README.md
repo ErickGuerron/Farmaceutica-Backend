@@ -140,6 +140,12 @@ curl -X POST http://localhost:5000/auth/login \
 
 Los redirect URI registrados en Google, Facebook e Instagram deben ser `{OAUTH_REDIRECT_BASE}/auth/{proveedor}/callback`.
 
+### Retorno a Flutter Web
+
+Aplica la migración `0003` con `alembic upgrade head` y configura `OAUTH_FRONTEND_RETURNS` en las instancias de Flask con URLs completas y separadas por comas. Para Flutter Web local usa `OAUTH_FRONTEND_RETURNS=http://localhost:58819/`. El callback registrado en el proveedor sigue apuntando al dominio de Flask. Mantén `OAUTH_REDIRECT_BASE` en ese dominio y reinicia las instancias después de configurarlas.
+
+Flutter solicita la autorización con `retorno` y `desafio`, y Flask redirige al cliente con un código de un solo uso. `POST /auth/intercambiar` recibe `state`, `code` y `verifier` y devuelve el JWT. Las instancias deben compartir el primario SQL y el `JWT_SECRET`. La ruta de inicio sin `retorno` usa el flujo anterior.
+
 ## Balanceo de carga con Nginx
 
 Con `PORTS=5000,5001` la API queda escuchando en ambos puertos. Ejemplo de configuración:

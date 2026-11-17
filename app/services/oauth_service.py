@@ -34,7 +34,7 @@ def _credenciales(proveedor, config: Config):
     return cid, secreto
 
 
-def _crear_state(proveedor, config: Config):
+def crear_state(proveedor, config: Config, flujo_web=False):
     ahora = datetime.now(timezone.utc)
     payload = {
         "prov": proveedor,
@@ -42,6 +42,8 @@ def _crear_state(proveedor, config: Config):
         "iat": ahora,
         "exp": ahora + timedelta(minutes=STATE_MINUTOS),
     }
+    if flujo_web:
+        payload["flujo"] = "flutter_web"
     return jwt.encode(payload, config.jwt_secret, algorithm="HS256")
 
 
@@ -52,14 +54,24 @@ def _validar_state(state, proveedor, config: Config):
         raise ErrorAplicacion("Estado de autorización inválido o vencido", status=400)
     if payload.get("prov") != proveedor:
         raise ErrorAplicacion("Estado de autorización inválido", status=400)
+    return payload
 
 
-def url_autorizacion(proveedor, config: Config):
+def es_flujo_web(state, proveedor, config):
+    if not state or proveedor not in PROVEEDORES:
+        return False
+    try:
+        return _validar_state(state, proveedor, config).get("flujo") == "flutter_web"
+    except ErrorAplicacion:
+        return False  # El callback anterior conserva sus respuestas de validación.
+
+
+def url_autorizacion(proveedor, config: Config, *, state=None):
     if proveedor not in PROVEEDORES:
         raise ErrorAplicacion("Proveedor no soportado", status=404)
 
     cid, _ = _credenciales(proveedor, config)
-    state = _crear_state(proveedor, config)
+    state = state or crear_state(proveedor, config)
     redirect = _redirect_uri(proveedor, config)
 
     if proveedor == "google":
