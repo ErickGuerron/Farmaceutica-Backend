@@ -124,11 +124,16 @@ def test_callback_facebook_crea_usuario_y_vincula_identidad(client, monkeypatch)
     assert otra_vez.get_json()["usuario"]["id_usuario"] == datos["usuario"]["id_usuario"]
 
 
-def test_callback_instagram_sin_correo_usa_user_id(client, monkeypatch):
+def test_callback_instagram_via_facebook_login(client, monkeypatch):
     def fake_llamar(metodo, url, **kwargs):
-        if url.endswith("/oauth/access_token"):
-            return {"data": [{"access_token": "tok", "user_id": "ig-7"}]}
-        return {"user_id": "ig-7", "username": "farmacia_ig"}
+        if "oauth/access_token" in url:
+            return {"access_token": "tok-usuario"}
+        if url.endswith("/me/accounts"):
+            return {"data": [
+                {"id": "pagina-1", "name": "Sin IG"},
+                {"id": "pagina-2", "name": "Farmacia", "instagram_business_account": {"id": "ig-7"}},
+            ]}
+        return {"username": "farmacia_ig"}
 
     monkeypatch.setattr(oauth_service, "_llamar", fake_llamar)
     # Instagram agrega "#_" al código; va codificado en la URL para no tratarlo como fragmento.
@@ -138,6 +143,18 @@ def test_callback_instagram_sin_correo_usa_user_id(client, monkeypatch):
     assert usuario["nombre"] == "farmacia_ig"
     assert usuario["email"] is None
     assert usuario["proveedores"] == ["instagram"]
+
+
+def test_instagram_sin_cuenta_profesional_vinculada(client, monkeypatch):
+    def fake_llamar(metodo, url, **kwargs):
+        if "oauth/access_token" in url:
+            return {"access_token": "tok-usuario"}
+        return {"data": [{"id": "pagina-1", "name": "Sin IG"}]}
+
+    monkeypatch.setattr(oauth_service, "_llamar", fake_llamar)
+    respuesta = client.get(f"/auth/instagram/callback?code=cod&state={_state(client, 'instagram')}")
+    assert respuesta.status_code == 400
+    assert "Página de Facebook" in respuesta.get_json()["mensaje"]
 
 
 def test_google_no_vincula_correo_no_verificado(app):

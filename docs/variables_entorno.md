@@ -20,6 +20,8 @@ FACEBOOK_APP_ID=
 FACEBOOK_APP_SECRET=
 FACEBOOK_GRAPH_VERSION=v21.0
 
+# Instagram usa el login de Facebook (Instagram API with Facebook Login).
+# Son el App ID y App Secret de la app Farmaceutica-Ins (Configuración > Básica).
 INSTAGRAM_APP_ID=
 INSTAGRAM_APP_SECRET=
 

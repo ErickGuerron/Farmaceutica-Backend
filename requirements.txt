@@ -7,3 +7,4 @@ PyJWT>=2.8,<3
 python-dotenv>=1.0,<2
 requests>=2.31,<3
 pytest>=8.0,<10
+Faker>=30.0,<40

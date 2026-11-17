@@ -82,12 +82,13 @@ def url_autorizacion(proveedor, config: Config):
             "state": state,
         }
     else:
-        base = "https://www.instagram.com/oauth/authorize"
+        # Instagram se autentica con Facebook Login: la cuenta profesional debe estar en una Página de Facebook.
+        base = f"https://www.facebook.com/{config.facebook_graph_version}/dialog/oauth"
         params = {
             "client_id": cid,
             "redirect_uri": redirect,
             "response_type": "code",
-            "scope": "instagram_business_basic",
+            "scope": "instagram_basic,pages_show_list",
             "state": state,
         }
 
@@ -145,27 +146,36 @@ def _perfil_facebook(code, config: Config):
 
 
 def _perfil_instagram(code, config: Config):
+    """Flujo Instagram API with Facebook Login: token de usuario -> Páginas -> cuenta profesional de Instagram."""
     cid, secreto = _credenciales("instagram", config)
-    respuesta = _llamar("POST", "https://api.instagram.com/oauth/access_token", data={
+    version = config.facebook_graph_version
+
+    token = _llamar("GET", f"https://graph.facebook.com/{version}/oauth/access_token", params={
         "client_id": cid,
         "client_secret": secreto,
-        "grant_type": "authorization_code",
         "redirect_uri": _redirect_uri("instagram", config),
         "code": code,
-    })
-    try:
-        cuenta = respuesta["data"][0]
-        token = cuenta["access_token"]
-    except (KeyError, IndexError, TypeError):
-        raise ErrorAplicacion("No se pudo validar la sesión con el proveedor", status=502)
+    })["access_token"]
 
-    info = _llamar("GET", "https://graph.instagram.com/me", params={
-        "fields": "user_id,username",
+    paginas = _llamar("GET", f"https://graph.facebook.com/{version}/me/accounts", params={
+        "fields": "id,name,instagram_business_account",
+        "access_token": token,
+    }).get("data", [])
+
+    cuenta = next((p["instagram_business_account"] for p in paginas if p.get("instagram_business_account")), None)
+    if cuenta is None:
+        raise ErrorAplicacion(
+            "No se encontró una cuenta de Instagram profesional conectada a una Página de Facebook",
+            status=400,
+        )
+
+    info = _llamar("GET", f"https://graph.facebook.com/{version}/{cuenta['id']}", params={
+        "fields": "username",
         "access_token": token,
     })
-    # Instagram Business Login no entrega correo: la cuenta se identifica solo por su user_id.
+    # Instagram no entrega correo: la cuenta se identifica por su ID de Instagram.
     return {
-        "uid": info.get("user_id") or cuenta.get("user_id"),
+        "uid": cuenta["id"],
         "nombre": info.get("username"),
         "email": None,
         "email_verificado": False,

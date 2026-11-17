@@ -74,7 +74,36 @@ def construir_parser():
     admin.add_argument("--email", required=True)
     admin.add_argument("--password", help="Si se omite se pedirá de forma interactiva")
 
+    seed = subcomandos.add_parser("seed", help="Crea admin, empleado y datos de ejemplo (desarrollo)")
+    seed.add_argument("--admin-email", default="admin@farmacia.local")
+    seed.add_argument("--admin-password", help="Si se omite se genera y se muestra una vez")
+    seed.add_argument("--empleado-email", default="empleado@farmacia.local")
+    seed.add_argument("--empleado-password", help="Si se omite se genera y se muestra una vez")
+    seed.add_argument("--cantidad", type=int, default=20, help="Empleados de ejemplo a crear")
+    seed.add_argument("--forzar-empleados", action="store_true",
+                      help="Crea empleados aunque la tabla no esté vacía")
+
     return parser
+
+
+def _seed(settings: Config, args):
+    from app.services import seed_service
+
+    create_app(settings)  # inicializa la conexión
+    resumen = seed_service.sembrar(
+        admin_email=args.admin_email,
+        admin_password=args.admin_password,
+        empleado_email=args.empleado_email,
+        empleado_password=args.empleado_password,
+        cantidad_empleados=args.cantidad,
+        forzar_empleados=args.forzar_empleados,
+    )
+    for usuario in resumen["usuarios"]:
+        print(f"Usuario {usuario['rol']}: {usuario['email']} ({usuario['estado']})")
+    print(f"Empleados de ejemplo creados: {resumen['empleados_creados']}")
+    for rol, clave in resumen["contrasenas_generadas"].items():
+        print(f"Contraseña generada para {rol}: {clave}  (guárdela; no se volverá a mostrar)")
+    return 0
 
 
 def main(argv=None):
@@ -83,6 +112,9 @@ def main(argv=None):
 
     if args.comando == "crear-admin":
         return _crear_admin(settings, args)
+
+    if args.comando == "seed":
+        return _seed(settings, args)
 
     _servir(settings)
     return 0
